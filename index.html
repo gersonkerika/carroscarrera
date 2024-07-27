@@ -20,7 +20,8 @@
         }
         #game-container {
             position: relative;
-            width: 400px;
+            width: 100%;
+            max-width: 400px;
             height: 650px;
             background-color: transparent;
             border: 2px solid #be6060;
@@ -187,7 +188,7 @@
         let passedEnemyCars = 0;
         let enemyCarInterval;
         let enemyCars = [];
-        let lastDirection = 0;  // 0 for no movement, -1 for left, 1 for right
+        let lastDirection = 0;
         let enemyCarMoveIntervals = [];
 
         function movePlayerCar(direction) {
@@ -200,13 +201,13 @@
 
             if (direction === 'left') {
                 newPosition = currentPosition - moveAmount;
-                lastDirection = -1;  // Rotar a la izquierda
+                lastDirection = -1;
             } else if (direction === 'right') {
                 newPosition = currentPosition + moveAmount;
-                lastDirection = 1;   // Rotar a la derecha
+                lastDirection = 1;
             } else {
                 newPosition = currentPosition;
-                lastDirection = 0;    // No movimiento
+                lastDirection = 0;
             }
 
             newPosition = Math.max(0, Math.min(containerWidth - carWidth, newPosition));
@@ -215,8 +216,7 @@
         }
 
         function updateSteeringWheel() {
-            // Ajustar la rotación del timón
-            const rotationDegree = lastDirection * 30;  // Ajusta este valor según lo necesario
+            const rotationDegree = lastDirection * 30;
             steeringWheel.style.transform = `rotate(${rotationDegree}deg)`;
         }
 
@@ -301,6 +301,7 @@
             gameOverScreen.style.display = 'none';
             scoreValue.textContent = '0';
             pauseButton.textContent = 'Pausar';
+            startButton.style.display = 'none';
 
             while (gameContainer.firstChild) {
                 gameContainer.removeChild(gameContainer.firstChild);
@@ -316,8 +317,8 @@
             carSound.currentTime = 0;
             carSound.play();
 
-            lastDirection = 0; // Restablecer la posición del timón al reiniciar
-            updateSteeringWheel(); // Aplicar el restablecimiento al timón
+            lastDirection = 0;
+            updateSteeringWheel();
 
             startGame();
         }
@@ -359,9 +360,35 @@
             window.addEventListener('keyup', function(event) {
                 if (!isGameOver && !isPaused) {
                     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                        movePlayerCar('none'); // No movimiento
+                        movePlayerCar('none');
                     }
                 }
+            });
+
+            let initialTouchX = null;
+            steeringWheel.addEventListener('touchstart', function(event) {
+                event.preventDefault();
+                initialTouchX = event.touches[0].clientX;
+            });
+
+            steeringWheel.addEventListener('touchmove', function(event) {
+                event.preventDefault();
+                if (initialTouchX === null) {
+                    return;
+                }
+                let currentTouchX = event.touches[0].clientX;
+                let diffX = currentTouchX - initialTouchX;
+
+                if (Math.abs(diffX) > 10) {
+                    movePlayerCar(diffX > 0 ? 'right' : 'left');
+                    initialTouchX = currentTouchX;
+                }
+            });
+
+            steeringWheel.addEventListener('touchend', function(event) {
+                event.preventDefault();
+                initialTouchX = null;
+                movePlayerCar('none');
             });
 
             enemyCarInterval = setInterval(() => {
@@ -392,7 +419,6 @@
         });
 
         initializePlayerCarPosition();
-        startGame();
     </script>
 </body>
 </html>
