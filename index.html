@@ -235,32 +235,38 @@
         }
 
         function togglePause() {
-            if (isGameOver) return;
+    if (isGameOver) return;
 
-            isPaused = !isPaused;
-            pauseButton.textContent = isPaused ? 'Reanudar' : 'Pausar';
+    isPaused = !isPaused;
+    pauseButton.textContent = isPaused ? 'Reanudar' : 'Pausar';
 
-            if (isPaused) {
-                carSound.pause();
-                enemyCars.forEach(car => {
-                    car.savedTopPosition = parseInt(car.style.top) || 0;
-                    car.savedLeftPosition = parseInt(car.style.left) || 0;
-                    clearInterval(car.moveInterval);
-                });
-            } else {
-                carSound.play();
-                enemyCars.forEach(car => {
-                    car.style.top = car.savedTopPosition + 'px';
-                    car.style.left = car.savedLeftPosition + 'px';
-                    car.moveInterval = setInterval(() => moveEnemyCar(car), 30);
-                });
-                enemyCarInterval = setInterval(() => {
-                    if (!isGameOver && !isPaused) {
-                        createEnemyCar();
-                    }
-                }, 1500);
+    if (isPaused) {
+        carSound.pause();
+        // Detener todos los intervalos de movimiento de los carros enemigos
+        enemyCars.forEach(car => {
+            car.savedTopPosition = parseInt(car.style.top) || 0;
+            car.savedLeftPosition = parseInt(car.style.left) || 0;
+            clearInterval(car.moveInterval);
+        });
+        // Detener la creación de nuevos carros enemigos
+        clearInterval(enemyCarInterval);
+    } else {
+        carSound.play();
+        // Restaurar la posición y reanudar el movimiento de los carros enemigos
+        enemyCars.forEach(car => {
+            car.style.top = car.savedTopPosition + 'px';
+            car.style.left = car.savedLeftPosition + 'px';
+            car.moveInterval = setInterval(() => moveEnemyCar(car), 30);
+        });
+        // Reiniciar el intervalo para crear carros enemigos
+        enemyCarInterval = setInterval(() => {
+            if (!isGameOver && !isPaused) {
+                createEnemyCar();
             }
-        }
+        }, 1500);
+    }
+}
+
 
         function moveEnemyCar(enemyCar) {
             const topPosition = parseInt(enemyCar.style.top) || 0;
