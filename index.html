@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Carrera de Carros</title>
     <style>
+        /* CSS permanece igual */
         body {
             font-family: Arial, sans-serif;
             background-color: #07f667;
@@ -59,7 +60,7 @@
             font-size: 24px;
             color: #f87204;
         }
-        #game-over {
+        #game-over, #max-score {
             position: absolute;
             top: 50%;
             left: 50%;
@@ -148,6 +149,11 @@
         <p>Puntuación: <span id="final-score">0</span></p>
         <button onclick="restartGame()">Reiniciar</button>
     </div>
+    <div id="max-score">
+        <h2>¡Felicidades!</h2>
+        <p>Has alcanzado el máximo de puntuación.</p>
+        <button onclick="restartGame()">Volver a Jugar</button>
+    </div>
     <div id="settings-menu">
         <h2>Configuración</h2>
         <label for="volume-control">Volumen:</label>
@@ -170,6 +176,7 @@
         const scoreValue = document.getElementById('score-value');
         const finalScore = document.getElementById('final-score');
         const gameOverScreen = document.getElementById('game-over');
+        const maxScoreScreen = document.getElementById('max-score');
         const pauseButton = document.getElementById('pause-button');
         const settingsButton = document.getElementById('settings-button');
         const settingsMenu = document.getElementById('settings-menu');
@@ -189,7 +196,6 @@
         let enemyCarInterval;
         let enemyCars = [];
         let lastDirection = 0;
-        let enemyCarMoveIntervals = [];
 
         function movePlayerCar(direction) {
             const containerWidth = gameContainer.offsetWidth;
@@ -211,13 +217,70 @@
             }
 
             newPosition = Math.max(0, Math.min(containerWidth - carWidth, newPosition));
+
+            // Ajuste para evitar el salto del carro en el lado del volante
+            if (newPosition < carWidth / 2) {
+                newPosition = carWidth / 2;
+            } else if (newPosition > containerWidth - carWidth / 2) {
+                newPosition = containerWidth - carWidth / 2;
+            }
+
             playerCar.style.left = `${newPosition}px`;
             updateSteeringWheel();
         }
 
         function updateSteeringWheel() {
-            const rotationDegree = lastDirection * 30;
-            steeringWheel.style.transform = `rotate(${rotationDegree}deg)`;
+            const rotation = lastDirection * 15; // 15 grados por dirección
+            steeringWheel.style.transform = `rotate(${rotation}deg)`;
+        }
+
+        function togglePause() {
+            if (isGameOver) return;
+
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? 'Reanudar' : 'Pausar';
+
+            if (isPaused) {
+                carSound.pause();
+                enemyCars.forEach(car => {
+                    car.savedTopPosition = parseInt(car.style.top) || 0;
+                    car.savedLeftPosition = parseInt(car.style.left) || 0;
+                    clearInterval(car.moveInterval);
+                });
+            } else {
+                carSound.play();
+                enemyCars.forEach(car => {
+                    car.style.top = car.savedTopPosition + 'px';
+                    car.style.left = car.savedLeftPosition + 'px';
+                    car.moveInterval = setInterval(() => moveEnemyCar(car), 30);
+                });
+                enemyCarInterval = setInterval(() => {
+                    if (!isGameOver && !isPaused) {
+                        createEnemyCar();
+                    }
+                }, 1500);
+            }
+        }
+
+        function moveEnemyCar(enemyCar) {
+            const topPosition = parseInt(enemyCar.style.top) || 0;
+            enemyCar.style.top = topPosition + gameSpeed + 'px';
+
+            const playerPosition = parseInt(playerCar.style.left) || (gameContainer.offsetWidth - playerCar.offsetWidth) / 2;
+            const enemyPosition = parseInt(enemyCar.style.left);
+            const moveDirection = playerPosition - enemyPosition;
+
+            enemyCar.style.left = `${enemyPosition + moveDirection * 0.02}px`;
+
+            if (topPosition > gameContainer.offsetHeight) {
+                clearInterval(enemyCar.moveInterval);
+                gameContainer.removeChild(enemyCar);
+                enemyCars = enemyCars.filter(car => car !== enemyCar);
+                passedEnemyCars++;
+                updateScore();
+            }
+
+            checkCollision(enemyCar);
         }
 
         function createEnemyCar() {
@@ -228,30 +291,7 @@
             gameContainer.appendChild(enemyCar);
             enemyCars.push(enemyCar);
 
-            const moveEnemyCar = setInterval(() => {
-                if (!isGameOver && !isPaused) {
-                    const topPosition = parseInt(enemyCar.style.top) || 0;
-                    enemyCar.style.top = topPosition + gameSpeed + 'px';
-
-                    const playerPosition = parseInt(playerCar.style.left) || (gameContainer.offsetWidth - playerCar.offsetWidth) / 2;
-                    const enemyPosition = parseInt(enemyCar.style.left);
-                    const moveDirection = playerPosition - enemyPosition;
-
-                    enemyCar.style.left = `${enemyPosition + moveDirection * 0.02}px`;
-
-                    if (topPosition > gameContainer.offsetHeight) {
-                        clearInterval(moveEnemyCar);
-                        gameContainer.removeChild(enemyCar);
-                        enemyCars = enemyCars.filter(car => car !== enemyCar);
-                        passedEnemyCars++;
-                        updateScore();
-                    }
-
-                    checkCollision(enemyCar);
-                }
-            }, 30);
-
-            enemyCarMoveIntervals.push(moveEnemyCar);
+            enemyCar.moveInterval = setInterval(() => moveEnemyCar(enemyCar), 30);
         }
 
         function checkCollision(enemy) {
@@ -272,7 +312,26 @@
         function updateScore() {
             score = passedEnemyCars;
             scoreValue.textContent = score;
+
+            // Ajusta la velocidad del juego en función de la puntuación
             gameSpeed = baseSpeed + Math.floor(score / 5);
+
+            // Aumenta la velocidad de los carros enemigos cada 50 puntos
+            if (score >= 50) {
+                gameSpeed = baseSpeed + Math.floor(score / 3);
+            }
+
+            // Muestra el mensaje de felicitaciones si se alcanza el máximo
+            if (score >= 150) {
+                gameOverScreen.style.display = 'none';
+                maxScoreScreen.style.display = 'block';
+                clearInterval(enemyCarInterval);
+                enemyCars.forEach(car => {
+                    clearInterval(car.moveInterval);
+                    gameContainer.removeChild(car);
+                });
+                enemyCars = [];
+            }
         }
 
         function endGame() {
@@ -288,8 +347,6 @@
                 gameContainer.removeChild(car);
             });
             enemyCars = [];
-            enemyCarMoveIntervals.forEach(interval => clearInterval(interval));
-            enemyCarMoveIntervals = [];
         }
 
         function restartGame() {
@@ -299,6 +356,7 @@
             passedEnemyCars = 0;
             gameSpeed = baseSpeed;
             gameOverScreen.style.display = 'none';
+            maxScoreScreen.style.display = 'none';
             scoreValue.textContent = '0';
             pauseButton.textContent = 'Pausar';
             startButton.style.display = 'none';
@@ -321,27 +379,6 @@
             updateSteeringWheel();
 
             startGame();
-        }
-
-        function togglePause() {
-            if (isGameOver) return;
-
-            isPaused = !isPaused;
-            pauseButton.textContent = isPaused ? 'Reanudar' : 'Pausar';
-
-            if (isPaused) {
-                clearInterval(enemyCarInterval);
-                enemyCarMoveIntervals.forEach(interval => clearInterval(interval));
-                enemyCarMoveIntervals = [];
-                carSound.pause();
-            } else {
-                enemyCarInterval = setInterval(() => {
-                    if (!isGameOver && !isPaused) {
-                        createEnemyCar();
-                    }
-                }, 1500);
-                carSound.play();
-            }
         }
 
         function startGame() {
@@ -422,3 +459,7 @@
     </script>
 </body>
 </html>
+
+
+
+
