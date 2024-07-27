@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrera de Carros</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #07f667;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 650px;
+            background-color: transparent;
+            border: 2px solid #be6060;
+            border-radius: 8px;
+            overflow: hidden;
+            background-image: url('pista.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: repeat-y;
+            animation: moveBackground 0.5s linear infinite;
+        }
+        .car {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70px;
+            height: 120px;
+            background-image: url('car.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+        }
+        .enemy-car {
+            position: absolute;
+            width: 60px;
+            height: 105px;
+            background-image: url('carro1.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            color: #f87204;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+        #buttons-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #pause-button, #settings-button, #start-button {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #pause-button {
+            background-color: #ff6f6f;
+        }
+        #settings-button {
+            background-color: #009688;
+        }
+        #start-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            background-color: #4caf50;
+            font-size: 20px;
+        }
+        #settings-menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+            z-index: 1000;
+        }
+        #settings-menu input[type="range"] {
+            width: 100%;
+        }
+        #steering-wheel {
+            position: fixed;
+            width: 150px;
+            height: 150px;
+            background-image: url('timon.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+            bottom: 10px;
+            right: 30px;
+            transform-origin: center;
+            transition: transform 0.1s ease;
+        }
+        @keyframes moveBackground {
+            from {
+                background-position: 0 0;
+            }
+            to {
+                background-position: 0 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="player-car" class="car"></div>
+    </div>
+    <div id="score">Puntuación: <span id="score-value">0</span></div>
+    <div id="game-over">
+        <h2>Game Over</h2>
+        <p>Puntuación: <span id="final-score">0</span></p>
+        <button onclick="restartGame()">Reiniciar</button>
+    </div>
+    <div id="settings-menu">
+        <h2>Configuración</h2>
+        <label for="volume-control">Volumen:</label>
+        <input type="range" id="volume-control" min="0" max="1" step="0.1" value="1">
+        <button onclick="closeSettings()">Cerrar</button>
+    </div>
+    <div id="steering-wheel"></div>
+    <div id="buttons-container">
+        <button id="pause-button" onclick="togglePause()">Pausar</button>
+        <button id="settings-button" onclick="toggleSettings()">Configuración</button>
+    </div>
+    <button id="start-button" onclick="startGame()">Iniciar Juego</button>
+
+    <!-- Elementos de audio -->
+    <audio id="car-sound" src="carro.mp3" loop></audio>
+    <audio id="game-over-sound" src="game-over-sound.mp3"></audio>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const scoreValue = document.getElementById('score-value');
+        const finalScore = document.getElementById('final-score');
+        const gameOverScreen = document.getElementById('game-over');
+        const pauseButton = document.getElementById('pause-button');
+        const settingsButton = document.getElementById('settings-button');
+        const settingsMenu = document.getElementById('settings-menu');
+        const volumeControl = document.getElementById('volume-control');
+        const startButton = document.getElementById('start-button');
+        const carSound = document.getElementById('car-sound');
+        const gameOverSound = document.getElementById('game-over-sound');
+        const steeringWheel = document.getElementById('steering-wheel');
+
+        let score = 0;
+        let baseSpeed = 7;
+        let gameSpeed = baseSpeed;
+        let isGameOver = false;
+        let isPaused = false;
+        let playerCar = document.getElementById('player-car');
+        let passedEnemyCars = 0;
+        let enemyCarInterval;
+        let enemyCars = [];
+        let lastDirection = 0;  // 0 for no movement, -1 for left, 1 for right
+        let enemyCarMoveIntervals = [];
+
+        function movePlayerCar(direction) {
+            const containerWidth = gameContainer.offsetWidth;
+            const carWidth = playerCar.offsetWidth;
+            const moveAmount = 10;
+
+            let currentPosition = parseInt(playerCar.style.left) || (containerWidth - carWidth) / 2;
+            let newPosition;
+
+            if (direction === 'left') {
+                newPosition = currentPosition - moveAmount;
+                lastDirection = -1;  // Rotar a la izquierda
+            } else if (direction === 'right') {
+                newPosition = currentPosition + moveAmount;
+                lastDirection = 1;   // Rotar a la derecha
+            } else {
+                newPosition = currentPosition;
+                lastDirection = 0;    // No movimiento
+            }
+
+            newPosition = Math.max(0, Math.min(containerWidth - carWidth, newPosition));
+            playerCar.style.left = `${newPosition}px`;
+            updateSteeringWheel();
+        }
+
+        function updateSteeringWheel() {
+            // Ajustar la rotación del timón
+            const rotationDegree = lastDirection * 30;  // Ajusta este valor según lo necesario
+            steeringWheel.style.transform = `rotate(${rotationDegree}deg)`;
+        }
+
+        function createEnemyCar() {
+            const enemyCar = document.createElement('div');
+            enemyCar.classList.add('enemy-car');
+            enemyCar.style.left = `${Math.random() * (gameContainer.offsetWidth - 60)}px`;
+            enemyCar.style.top = '0px';
+            gameContainer.appendChild(enemyCar);
+            enemyCars.push(enemyCar);
+
+            const moveEnemyCar = setInterval(() => {
+                if (!isGameOver && !isPaused) {
+                    const topPosition = parseInt(enemyCar.style.top) || 0;
+                    enemyCar.style.top = topPosition + gameSpeed + 'px';
+
+                    const playerPosition = parseInt(playerCar.style.left) || (gameContainer.offsetWidth - playerCar.offsetWidth) / 2;
+                    const enemyPosition = parseInt(enemyCar.style.left);
+                    const moveDirection = playerPosition - enemyPosition;
+
+                    enemyCar.style.left = `${enemyPosition + moveDirection * 0.02}px`;
+
+                    if (topPosition > gameContainer.offsetHeight) {
+                        clearInterval(moveEnemyCar);
+                        gameContainer.removeChild(enemyCar);
+                        enemyCars = enemyCars.filter(car => car !== enemyCar);
+                        passedEnemyCars++;
+                        updateScore();
+                    }
+
+                    checkCollision(enemyCar);
+                }
+            }, 30);
+
+            enemyCarMoveIntervals.push(moveEnemyCar);
+        }
+
+        function checkCollision(enemy) {
+            const playerBounds = playerCar.getBoundingClientRect();
+            const enemyBounds = enemy.getBoundingClientRect();
+            const margin = 10;
+
+            if (
+                playerBounds.left + margin < enemyBounds.left + enemyBounds.width - margin &&
+                playerBounds.left + playerBounds.width - margin > enemyBounds.left + margin &&
+                playerBounds.top + margin < enemyBounds.top + enemyBounds.height - margin &&
+                playerBounds.top + playerBounds.height - margin > enemyBounds.top + margin
+            ) {
+                endGame();
+            }
+        }
+
+        function updateScore() {
+            score = passedEnemyCars;
+            scoreValue.textContent = score;
+            gameSpeed = baseSpeed + Math.floor(score / 5);
+        }
+
+        function endGame() {
+            isGameOver = true;
+            finalScore.textContent = score;
+            gameOverScreen.style.display = 'block';
+            gameOverSound.play();
+            carSound.pause();
+            carSound.currentTime = 0;
+            clearInterval(enemyCarInterval);
+            enemyCars.forEach(car => {
+                clearInterval(car.moveInterval);
+                gameContainer.removeChild(car);
+            });
+            enemyCars = [];
+            enemyCarMoveIntervals.forEach(interval => clearInterval(interval));
+            enemyCarMoveIntervals = [];
+        }
+
+        function restartGame() {
+            isGameOver = false;
+            isPaused = false;
+            score = 0;
+            passedEnemyCars = 0;
+            gameSpeed = baseSpeed;
+            gameOverScreen.style.display = 'none';
+            scoreValue.textContent = '0';
+            pauseButton.textContent = 'Pausar';
+
+            while (gameContainer.firstChild) {
+                gameContainer.removeChild(gameContainer.firstChild);
+            }
+
+            const newPlayerCar = document.createElement('div');
+            newPlayerCar.id = 'player-car';
+            newPlayerCar.classList.add('car');
+            gameContainer.appendChild(newPlayerCar);
+
+            playerCar = newPlayerCar;
+            initializePlayerCarPosition();
+            carSound.currentTime = 0;
+            carSound.play();
+
+            lastDirection = 0; // Restablecer la posición del timón al reiniciar
+            updateSteeringWheel(); // Aplicar el restablecimiento al timón
+
+            startGame();
+        }
+
+        function togglePause() {
+            if (isGameOver) return;
+
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? 'Reanudar' : 'Pausar';
+
+            if (isPaused) {
+                clearInterval(enemyCarInterval);
+                enemyCarMoveIntervals.forEach(interval => clearInterval(interval));
+                enemyCarMoveIntervals = [];
+                carSound.pause();
+            } else {
+                enemyCarInterval = setInterval(() => {
+                    if (!isGameOver && !isPaused) {
+                        createEnemyCar();
+                    }
+                }, 1500);
+                carSound.play();
+            }
+        }
+
+        function startGame() {
+            startButton.style.display = 'none';
+
+            window.addEventListener('keydown', function(event) {
+                if (!isGameOver && !isPaused) {
+                    if (event.key === 'ArrowLeft') {
+                        movePlayerCar('left');
+                    } else if (event.key === 'ArrowRight') {
+                        movePlayerCar('right');
+                    }
+                }
+            });
+
+            window.addEventListener('keyup', function(event) {
+                if (!isGameOver && !isPaused) {
+                    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                        movePlayerCar('none'); // No movimiento
+                    }
+                }
+            });
+
+            enemyCarInterval = setInterval(() => {
+                if (!isGameOver && !isPaused) {
+                    createEnemyCar();
+                }
+            }, 1500);
+
+            carSound.play();
+        }
+
+        function initializePlayerCarPosition() {
+            playerCar.style.left = `${gameContainer.offsetWidth / 2 - playerCar.offsetWidth / 2}px`;
+        }
+
+        function toggleSettings() {
+            settingsMenu.style.display = settingsMenu.style.display === 'none' ? 'block' : 'none';
+            volumeControl.value = carSound.volume;
+        }
+
+        function closeSettings() {
+            settingsMenu.style.display = 'none';
+        }
+
+        volumeControl.addEventListener('input', (event) => {
+            const volume = event.target.value;
+            carSound.volume = volume;
+        });
+
+        initializePlayerCarPosition();
+        startGame();
+    </script>
+</body>
+</html>
